@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vastu Layout Engine - Prototype</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .app-container {
+            display: flex;
+            gap: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .sidebar, .dashboard {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .canvas-container-wrapper {
+            border: 2px solid #34495e;
+            border-radius: 4px;
+            background-color: #ecf0f1;
+            position: relative;
+        }
+        h2 { margin-top: 0; font-size: 1.2rem; color: #2c3e50; }
+        button {
+            padding: 10px;
+            background-color: #2980b9;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        button:hover { background-color: #3498db; }
+        .result-card {
+            padding: 15px;
+            border-radius: 8px;
+            background: #f8f9fa;
+            border-left: 5px solid #bdc3c7;
+            font-size: 0.9rem;
+        }
+        .success { border-left-color: #27ae60; background: #eafaf1; }
+        .error { border-left-color: #e74c3c; background: #fdedec; }
+        .compass-label {
+            position: absolute;
+            font-weight: bold;
+            color: #7f8c8d;
+            font-size: 12px;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="sidebar">
+        <h2>🏗️ Add Rooms</h2>
+        <p style="font-size: 0.8rem; color: #7f8c8d;">Click to add, then drag onto the grid.</p>
+        <button onclick="addRoom('Kitchen', '#e67e22')">🔥 Add Kitchen</button>
+        <button onclick="addRoom('Master Bedroom', '#8e44ad')">🛏️ Add Master Bed</button>
+        <button onclick="addRoom('Pooja Room', '#f1c40f')">🕉️ Add Pooja Room</button>
+        <button onclick="addRoom('Toilet', '#7f8c8d')">🚽 Add Toilet</button>
+    </div>
+
+    <div class="canvas-container-wrapper">
+        <span class="compass-label" style="top: -20px; left: 50%; transform: translateX(-50%); color: red;">NORTH</span>
+        <span class="compass-label" style="bottom: -20px; left: 50%; transform: translateX(-50%);">SOUTH</span>
+        <span class="compass-label" style="top: 50%; right: -40px; transform: translateY(-50%);">EAST</span>
+        <span class="compass-label" style="top: 50%; left: -45px; transform: translateY(-50%);">WEST</span>
+        
+        <canvas id="vastuCanvas" width="600" height="600"></canvas>
+    </div>
+
+    <div class="dashboard">
+        <h2>🧭 Vastu Analysis</h2>
+        <div id="scoreDisplay" style="font-size: 2rem; font-weight: bold; color: #2c3e50;">Score: 100</div>
+        <div id="liveFeedback">
+            <div class="result-card">Drag a room onto the grid to see live Vastu analysis.</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. Initialize Canvas
+    const canvas = new fabric.Canvas('vastuCanvas');
+    const gridSize = 200; // 600px canvas / 3 = 200px per grid box
+    let currentScore = 100;
+
+    // 2. Draw the 3x3 Vastu Purusha Mandala Grid
+    for (let i = 1; i < 3; i++) {
+        // Vertical Lines
+        canvas.add(new fabric.Line([i * gridSize, 0, i * gridSize, 600], { stroke: '#bdc3c7', selectable: false }));
+        // Horizontal Lines
+        canvas.add(new fabric.Line([0, i * gridSize, 600, i * gridSize], { stroke: '#bdc3c7', selectable: false }));
+    }
+
+    // Grid Zone Mapping (Row, Column) -> Direction
+    const vastuZones = [
+        ['North-West', 'North', 'North-East'],
+        ['West', 'Brahmasthan (Center)', 'East'],
+        ['South-West', 'South', 'South-East']
+    ];
+
+    // 3. Function to spawn rooms on the canvas
+    function addRoom(name, color) {
+        const rect = new fabric.Rect({ width: 100, height: 100, fill: color, opacity: 0.8, rx: 8, ry: 8 });
+        const text = new fabric.Text(name, { fontSize: 14, fill: '#fff', originX: 'center', originY: 'center', left: 50, top: 50 });
+        
+        const group = new fabric.Group([rect, text], {
+            left: 50, top: 50,
+            hasControls: true, hasBorders: true,
+            name: name // Store the room type for logic engine
+        });
+        
+        canvas.add(group);
+        canvas.setActiveObject(group);
+    }
+
+    // 4. THE RULES ENGINE: Listen for drag-and-drop events
+    canvas.on('object:modified', function(options) {
+        const room = options.target;
+        
+        // Calculate the center point of the dropped room
+        const centerX = room.left + (room.width * room.scaleX) / 2;
+        const centerY = room.top + (room.height * room.scaleY) / 2;
+
+        // Ensure the room is inside the canvas boundaries before calculating
+        if(centerX >= 0 && centerX <= 600 && centerY >= 0 && centerY <= 600) {
+            
+            // Determine grid column and row (0, 1, or 2)
+            const col = Math.floor(centerX / gridSize);
+            const row = Math.floor(centerY / gridSize);
+            const zone = vastuZones[row][col];
+
+            evaluateVastu(room.name, zone);
+        }
+    });
+
+    // 5. Logic Evaluation
+    function evaluateVastu(roomType, zone) {
+        const feedbackDiv = document.getElementById('liveFeedback');
+        const scoreDiv = document.getElementById('scoreDisplay');
+        let status = 'neutral';
+        let message = `Placed ${roomType} in ${zone}.`;
+        let scoreChange = 0;
+
+        // Logic Rules (You can expand this extensively)
+        if (roomType === 'Kitchen') {
+            if (zone === 'South-East') { status = 'success'; message = 'Excellent! Agni (Fire) zone is perfect for Kitchen.'; scoreChange = 10; }
+            else if (zone === 'North-East') { status = 'error'; message = 'Critical Flaw: Kitchen in Ishan (Water) zone causes health issues.'; scoreChange = -20; }
+        } 
+        else if (roomType === 'Master Bedroom') {
+            if (zone === 'South-West') { status = 'success'; message = 'Perfect! Nairutya (Earth) provides stability for the head of family.'; scoreChange = 10; }
+            else if (zone === 'North-East') { status = 'error'; message = 'Major Flaw: Master Bed in Water zone disrupts peace.'; scoreChange = -15; }
+        }
+        else if (roomType === 'Pooja Room') {
+            if (zone === 'North-East') { status = 'success'; message = 'Perfect! Ishan zone is highly auspicious for worship.'; scoreChange = 15; }
+            else if (zone === 'South') { status = 'error'; message = 'Avoid Pooja Room in the South (Yama) zone.'; scoreChange = -10; }
+        }
+        else if (roomType === 'Toilet') {
+            if (zone === 'North-East' || zone === 'Brahmasthan (Center)') { status = 'error'; message = 'CRITICAL: Toilets strictly prohibited here. High negative energy.'; scoreChange = -30; }
+            else if (zone === 'North-West') { status = 'success'; message = 'Acceptable placement for a toilet (Vayavya zone).'; scoreChange = 5; }
+        }
+
+        // Check Brahmasthan (Center should ideally be empty)
+        if (zone === 'Brahmasthan (Center)' && roomType !== 'Open Courtyard') {
+            status = 'error'; message = `CRITICAL: The Brahmasthan must remain heavy-structure free. Remove ${roomType}.`; scoreChange = -25;
+        }
+
+        // Update UI
+        currentScore = Math.min(100, Math.max(0, currentScore + scoreChange)); // Keep score between 0 and 100
+        scoreDiv.innerText = `Score: ${currentScore}`;
+        
+        feedbackDiv.innerHTML = `
+            <div class="result-card ${status}">
+                <strong>${zone} Analysis:</strong><br>
+                ${message}
+            </div>
+        ` + feedbackDiv.innerHTML; // Append new messages to the top
+    }
+</script>
+</body>
+</html>
