@@ -1,0 +1,12 @@
+{
+  "name": "vastu-backend",
+  "version": "1.0.0",
+  "description": "Backend rules engine for Vastu app",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
